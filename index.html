@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GIS Web Template - Phase 1</title>
+
+<link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+<script src="layers.js"></script>
+
+<style>
+html, body { margin:0; padding:0; height:100%; font-family:Arial, sans-serif; }
+#sidebar {
+  position:absolute; left:0; top:0; bottom:0; width:280px;
+  background:#fff; border-right:1px solid #ddd; overflow-y:auto; z-index:2;
+}
+#header { padding:16px; border-bottom:1px solid #eee; }
+#header h2 { margin:0; font-size:18px; }
+#layer-list { padding:12px; }
+.layer-row {
+  display:flex; justify-content:space-between; align-items:center;
+  padding:8px 0; border-bottom:1px solid #f2f2f2;
+}
+.layer-name { flex:1; margin-left:8px; }
+.zoom-btn {
+  border:1px solid #ccc; background:#fff; cursor:pointer;
+  border-radius:4px; padding:2px 8px;
+}
+#map { position:absolute; left:280px; right:0; top:0; bottom:0; }
+</style>
+</head>
+<body>
+
+<div id="sidebar">
+  <div id="header"><h2>Layers</h2></div>
+  <div id="layer-list"></div>
+</div>
+
+<div id="map"></div>
+
+<script>
+const map = new maplibregl.Map({
+  container: "map",
+  style: "https://tiles.openfreemap.org/styles/positron",
+  center: [-73.9209, 41.2901],
+  zoom: 8
+});
+
+map.addControl(new maplibregl.NavigationControl(), "top-right");
+
+map.on("load", () => {
+  buildLayerUI();
+  (window.LAYERS || []).forEach(loadLayer);
+});
+
+function loadLayer(layer){
+  if(layer.type === "geojson") loadGeoJSON(layer);
+  if(layer.type === "rest") loadREST(layer);
+  if(layer.type === "sheet") loadSheet(layer);
+}
+
+function loadGeoJSON(layer){
+  fetch(layer.url)
+    .then(r => r.json())
+    .then(data => addGeoJSONLayer(layer, data))
+    .catch(err => console.error("Failed loading", layer.name, err));
+}
+
+function loadREST(layer){
+  fetch(layer.url)
+    .then(r => r.json())
+    .then(data => addGeoJSONLayer(layer, data))
+    .catch(err => console.error("Failed loading", layer.name, err));
+}
+
+function loadSheet(layer){
+  Papa.parse(layer.url, {
+    download:true,
+    header:true,
+    complete: function(results){
+      const geojson = {
+        type:"FeatureCollection",
+        features: results.data
+          .filter(r => r[layer.latField] && r[layer.lngField])
+          .map(r => ({
+            type:"Feature",
+            geometry:{
+              type:"Point",
+              coordinates:[
+                parseFloat(r[layer.lngField]),
+                parseFloat(r[layer.latField])
+              ]
+            },
+            properties:r
+          }))
+      };
+      addGeoJSONLayer(layer, geojson);
+    },
+    error: err => console.error("Failed loading", layer.name, err)
+  });
+}
+
+function detectGeometry(data){
+  const feature = data.features?.find(f => f.geometry);
+  if(!feature) return "point";
+  const t = feature.geometry.type;
+  if(["Point","MultiPoint"].includes(t)) return "point";
+  if(["LineString","MultiLineString"].includes(t)) return "line";
+  return "polygon";
+}
+
+function addGeoJSONLayer(layer, data){
+  const geometryType = detectGeometry(data);
+
+  map.addSource(layer.id, {
+    type:"geojson",
+    data:data
+  });
+
+  if(geometryType === "point"){
+    map.addLayer({
+      id:layer.id,
+      type:"circle",
+      source:layer.id,
+      paint:{
+        "circle-radius":6,
+        "circle-color":"#2563eb",
+        "circle-stroke-width":1,
+        "circle-stroke-color":"#ffffff"
+      }
+    });
+  }
+
+  if(geometryType === "line"){
+    map.addLayer({
+      id:layer.id,
+      type:"line",
+      source:layer.id,
+      paint:{
+        "line-color":"#2563eb",
+        "line-width":2
+      }
+    });
+  }
+
+  if(geometryType === "polygon"){
+    map.addLayer({
+      id:layer.id,
+      type:"fill",
+      source:layer.id,
+      paint:{
+        "fill-color":"#f59e0b",
+        "fill-opacity":0.25,
+        "fill-outline-color":"#b45309"
+      }
+    });
+  }
+}
+
+function buildLayerUI(){
+  const container = document.getElementById("layer-list");
+
+  (window.LAYERS || []).forEach(layer => {
+    const row = document.createElement("div");
+    row.className = "layer-row";
+
+    row.innerHTML = `
+      <div>
+        <input type="checkbox" checked id="toggle-${layer.id}">
+        <span class="layer-name">${layer.name}</span>
+      </div>
+      <button class="zoom-btn" id="zoom-${layer.id}">⤢</button>
+    `;
+
+    container.appendChild(row);
+
+    row.querySelector(`#toggle-${layer.id}`).addEventListener("change", e => {
+      if(!map.getLayer(layer.id)) return;
+      map.setLayoutProperty(
+        layer.id,
+        "visibility",
+        e.target.checked ? "visible" : "none"
+      );
+    });
+
+    row.querySelector(`#zoom-${layer.id}`).addEventListener("click", () => {
+      const source = map.getSource(layer.id);
+      if(!source || !source._data || !source._data.features?.length) return;
+
+      const coords = [];
+      source._data.features.forEach(f => collectCoords(f.geometry, coords));
+
+      if(!coords.length) return;
+
+      let minX=coords[0][0], minY=coords[0][1], maxX=coords[0][0], maxY=coords[0][1];
+      coords.forEach(c => {
+        minX=Math.min(minX,c[0]);
+        minY=Math.min(minY,c[1]);
+        maxX=Math.max(maxX,c[0]);
+        maxY=Math.max(maxY,c[1]);
+      });
+
+      map.fitBounds([[minX,minY],[maxX,maxY]], {padding:40});
+    });
+  });
+}
+
+function collectCoords(geom, out){
+  if(!geom) return;
+  if(geom.type === "Point") out.push(geom.coordinates);
+  else if(geom.type === "MultiPoint" || geom.type === "LineString") out.push(...geom.coordinates);
+  else if(geom.type === "MultiLineString" || geom.type === "Polygon") geom.coordinates.flat().forEach(c => out.push(c));
+  else if(geom.type === "MultiPolygon") geom.coordinates.flat(2).forEach(c => out.push(c));
+}
+</script>
+
+</body>
+</html>
