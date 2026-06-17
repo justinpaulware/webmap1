@@ -18,74 +18,133 @@ html, body {
   padding: 0;
   height: 100%;
   font-family: Arial, sans-serif;
+  background: #f3f4f6;
 }
 
-#sidebar {
+/* =========================
+   MAP
+========================= */
+#map {
   position: absolute;
   left: 0;
+  right: 0;
   top: 0;
   bottom: 0;
-  width: 280px;
-  background: #fff;
-  border-right: 1px solid #ddd;
-  overflow-y: auto;
-  z-index: 2;
 }
 
+/* =========================
+   FLOATING SIDEBAR
+========================= */
+#sidebar {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  bottom: 16px;
+
+  width: 300px;
+
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.12);
+
+  overflow: hidden;
+  z-index: 10;
+
+  display: flex;
+  flex-direction: column;
+}
+
+/* =========================
+   HEADER
+========================= */
 #header {
-  padding: 16px;
+  padding: 14px 16px 10px 16px;
   border-bottom: 1px solid #eee;
+  background: #fff;
+}
+
+#project-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 6px;
+  letter-spacing: 0.2px;
 }
 
 #header h2 {
   margin: 0;
-  font-size: 18px;
+  font-size: 16px;
+  font-weight: 600;
+  color: #374151;
 }
 
+/* =========================
+   LIST CONTAINER
+========================= */
+#layer-list {
+  padding: 10px 10px 16px 10px;
+  overflow-y: auto;
+  flex: 1;
+}
+
+/* =========================
+   GROUPS
+========================= */
 .group-title {
-  padding: 10px 12px;
-  font-size: 12px;
+  margin-top: 14px;
+  margin-bottom: 6px;
+  padding: 6px 6px;
+
+  font-size: 11px;
   text-transform: uppercase;
-  color: #666;
-  border-top: 1px solid #f0f0f0;
-  margin-top: 10px;
+  letter-spacing: 0.08em;
+
+  color: #6b7280;
 }
 
-.layer-list {
-  padding: 8px 12px;
-}
-
+/* =========================
+   ROWS
+========================= */
 .layer-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 6px 0;
+
+  padding: 8px 8px;
+  margin-bottom: 4px;
+
+  border-radius: 8px;
+}
+
+.layer-row:hover {
+  background: #f9fafb;
 }
 
 .layer-left {
   display: flex;
   align-items: center;
   gap: 8px;
+  font-size: 13px;
+  color: #111827;
 }
 
+/* =========================
+   ZOOM BUTTON
+========================= */
 .zoom-btn {
-  border: 1px solid #ccc;
+  border: 1px solid #e5e7eb;
   background: #fff;
-  border-radius: 4px;
-  padding: 2px 8px;
+
+  border-radius: 8px;
+  padding: 4px 10px;
+
   cursor: pointer;
+  transition: all 0.15s ease;
 }
 
 .zoom-btn:hover {
-  background: #f5f5f5;
-}
-
-#map {
-  position: absolute;
-  left: 280px;
-  right: 0;
-  top: 0;
-  bottom: 0;
+  background: #f3f4f6;
+  border-color: #d1d5db;
 }
 </style>
 </head>
@@ -94,6 +153,9 @@ html, body {
 
 <div id="sidebar">
   <div id="header">
+    <div id="project-title">
+      MHREDC / Transformational Regional Initiatives
+    </div>
     <h2>Layers</h2>
   </div>
   <div id="layer-list"></div>
@@ -102,6 +164,10 @@ html, body {
 <div id="map"></div>
 
 <script>
+
+/* =========================
+   MAP INIT
+========================= */
 
 const map = new maplibregl.Map({
   container: "map",
@@ -116,16 +182,33 @@ map.addControl(new maplibregl.NavigationControl(), "top-right");
    STATE
 ========================= */
 
-let loadedCount = 0;
-let extentLayers = [];
+const STATE = {
+  featuresByLayer: {},
+  layerDefs: {},
+  loadedPromises: [],
+  mapReady: false
+};
 
 /* =========================
-   INIT
+   BOOTSTRAP
 ========================= */
 
-map.on("load", () => {
+map.on("load", async () => {
+
   buildSidebar();
-  (window.LAYERS || []).forEach(loadLayer);
+
+  const layers = window.LAYERS || [];
+
+  layers.forEach(l => STATE.layerDefs[l.id] = l);
+
+  STATE.loadedPromises = layers.map(loadLayer);
+
+  await Promise.all(STATE.loadedPromises);
+
+  STATE.mapReady = true;
+
+  runInitialView(layers);
+
 });
 
 /* =========================
@@ -133,74 +216,90 @@ map.on("load", () => {
 ========================= */
 
 function loadLayer(layer) {
-  if (layer.type === "geojson") loadGeoJSON(layer);
-  if (layer.type === "rest") loadREST(layer);
-  if (layer.type === "sheet") loadSheet(layer);
+  if (layer.type === "geojson") return loadGeoJSON(layer);
+  if (layer.type === "rest") return loadREST(layer);
+  if (layer.type === "sheet") return loadSheet(layer);
 }
 
-function loadGeoJSON(layer) {
-  fetch(layer.url)
-    .then(r => r.json())
-    .then(data => addLayer(layer, data))
-    .catch(err => console.error("Failed:", layer.name, err));
+async function loadGeoJSON(layer) {
+  const res = await fetch(layer.url);
+  const data = await res.json();
+  registerFeatures(layer.id, data);
 }
 
-function loadREST(layer) {
-  fetch(layer.url)
-    .then(r => r.json())
-    .then(data => addLayer(layer, data))
-    .catch(err => console.error("Failed:", layer.name, err));
+async function loadREST(layer) {
+  const res = await fetch(layer.url);
+  const data = await res.json();
+  registerFeatures(layer.id, data);
 }
 
 function loadSheet(layer) {
-  Papa.parse(layer.url, {
-    download: true,
-    header: true,
+  return new Promise((resolve, reject) => {
 
-    complete: function(results) {
+    Papa.parse(layer.url, {
+      download: true,
+      header: true,
 
-      const geojson = {
-        type: "FeatureCollection",
-        features: results.data
-          .filter(r => r[layer.latField] && r[layer.lngField])
-          .map(r => ({
-            type: "Feature",
-            geometry: {
-              type: "Point",
-              coordinates: [
-                parseFloat(r[layer.lngField]),
-                parseFloat(r[layer.latField])
-              ]
-            },
-            properties: r
-          }))
-      };
+      complete: function(results) {
 
-      addLayer(layer, geojson);
-    },
+        const geojson = {
+          type: "FeatureCollection",
+          features: results.data
+            .filter(r => r[layer.latField] && r[layer.lngField])
+            .map(r => ({
+              type: "Feature",
+              geometry: {
+                type: "Point",
+                coordinates: [
+                  parseFloat(r[layer.lngField]),
+                  parseFloat(r[layer.latField])
+                ]
+              },
+              properties: r
+            }))
+        };
 
-    error: err => console.error("Failed:", layer.name, err)
+        registerFeatures(layer.id, geojson);
+        resolve();
+
+      },
+
+      error: reject
+    });
+
   });
 }
 
 /* =========================
-   ADD LAYER
+   FEATURE REGISTRY
 ========================= */
 
-function addLayer(layer, data) {
+function registerFeatures(layerId, geojson) {
+  const features = geojson?.features || [];
+  STATE.featuresByLayer[layerId] = features;
+  addLayerToMap(layerId, geojson);
+}
 
-  map.addSource(layer.id, {
-    type: "geojson",
-    data: data
-  });
+/* =========================
+   MAP RENDERING
+========================= */
+
+function addLayerToMap(layerId, data) {
+
+  if (!map.getSource(layerId)) {
+    map.addSource(layerId, {
+      type: "geojson",
+      data
+    });
+  }
 
   const geomType = detectGeometry(data);
 
   if (geomType === "point") {
     map.addLayer({
-      id: layer.id,
+      id: layerId,
       type: "circle",
-      source: layer.id,
+      source: layerId,
       paint: {
         "circle-radius": 6,
         "circle-color": "#2563eb",
@@ -212,9 +311,9 @@ function addLayer(layer, data) {
 
   if (geomType === "line") {
     map.addLayer({
-      id: layer.id,
+      id: layerId,
       type: "line",
-      source: layer.id,
+      source: layerId,
       paint: {
         "line-color": "#2563eb",
         "line-width": 2
@@ -224,9 +323,9 @@ function addLayer(layer, data) {
 
   if (geomType === "polygon") {
     map.addLayer({
-      id: layer.id,
+      id: layerId,
       type: "fill",
-      source: layer.id,
+      source: layerId,
       paint: {
         "fill-color": "#f59e0b",
         "fill-opacity": 0.25,
@@ -234,21 +333,10 @@ function addLayer(layer, data) {
       }
     });
   }
-
-  /* =========================
-     EXTENT LOGIC
-  ========================= */
-
-  if (layer.initialExtentLayer) {
-    extentLayers.push(data);
-  }
-
-  loadedCount++;
-  checkAllLoaded();
 }
 
 /* =========================
-   DETECT GEOMETRY
+   GEOMETRY
 ========================= */
 
 function detectGeometry(data) {
@@ -263,43 +351,54 @@ function detectGeometry(data) {
 }
 
 /* =========================
-   AUTO FIT EXTENT
+   EXTENT ENGINE
 ========================= */
 
-function checkAllLoaded() {
-
-  if (loadedCount !== (window.LAYERS || []).length) return;
-  if (!extentLayers.length) return;
+function fitLayerExtent(layerIds, options = {}) {
 
   const coords = [];
 
-  extentLayers.forEach(fc => {
-    fc.features.forEach(f => {
-      collectCoords(f.geometry, coords);
-    });
+  layerIds.forEach(id => {
+    const features = STATE.featuresByLayer[id] || [];
+    features.forEach(f => collectCoords(f.geometry, coords));
   });
 
-  let minX, minY, maxX, maxY;
+  if (!coords.length) return;
 
-  coords.forEach((c, i) => {
-    if (i === 0) {
-      minX = maxX = c[0];
-      minY = maxY = c[1];
-    } else {
-      minX = Math.min(minX, c[0]);
-      minY = Math.min(minY, c[1]);
-      maxX = Math.max(maxX, c[0]);
-      maxY = Math.max(maxY, c[1]);
-    }
+  let minX = coords[0][0];
+  let minY = coords[0][1];
+  let maxX = coords[0][0];
+  let maxY = coords[0][1];
+
+  coords.forEach(c => {
+    minX = Math.min(minX, c[0]);
+    minY = Math.min(minY, c[1]);
+    maxX = Math.max(maxX, c[0]);
+    maxY = Math.max(maxY, c[1]);
   });
 
   map.fitBounds([[minX, minY], [maxX, maxY]], {
-    padding: 40
+    padding: options.padding || 40
   });
 }
 
 /* =========================
-   COORDS UTILITY
+   INITIAL VIEW
+========================= */
+
+function runInitialView(layers) {
+
+  const startup = layers
+    .filter(l => l.initialView || l.presetGroup === "startup")
+    .map(l => l.id);
+
+  if (!startup.length) return;
+
+  fitLayerExtent(startup, { padding: 60 });
+}
+
+/* =========================
+   COORDS
 ========================= */
 
 function collectCoords(geom, out) {
@@ -322,8 +421,8 @@ function collectCoords(geom, out) {
 ========================= */
 
 function buildSidebar() {
-  const container = document.getElementById("layer-list");
 
+  const container = document.getElementById("layer-list");
   const groups = {};
 
   (window.LAYERS || []).forEach(layer => {
@@ -354,7 +453,7 @@ function buildSidebar() {
 
       container.appendChild(row);
 
-      /* toggle */
+      /* TOGGLE */
       row.querySelector(`#toggle-${layer.id}`)
         .addEventListener("change", e => {
           if (!map.getLayer(layer.id)) return;
@@ -365,16 +464,15 @@ function buildSidebar() {
           );
         });
 
-      /* zoom */
+      /* ZOOM */
       row.querySelector(`#zoom-${layer.id}`)
         .addEventListener("click", () => {
-          const src = map.getSource(layer.id);
-          if (!src?._data?.features) return;
+
+          const features = STATE.featuresByLayer[layer.id];
+          if (!features?.length) return;
 
           const coords = [];
-          src._data.features.forEach(f => {
-            collectCoords(f.geometry, coords);
-          });
+          features.forEach(f => collectCoords(f.geometry, coords));
 
           if (!coords.length) return;
 
@@ -391,6 +489,7 @@ function buildSidebar() {
           map.fitBounds([[minX, minY], [maxX, maxY]], {
             padding: 40
           });
+
         });
 
     });
