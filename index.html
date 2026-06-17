@@ -3,44 +3,106 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>MHREDC / Transformational Regional Initiatives</title>
+
+<title>GIS Web Template - Phase 1</title>
 
 <link href="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.css" rel="stylesheet">
 <script src="https://unpkg.com/maplibre-gl@5.6.2/dist/maplibre-gl.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+
 <script src="layers.js"></script>
 
 <style>
-html, body { margin:0; padding:0; height:100%; font-family:Arial, sans-serif; }
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: Arial, sans-serif;
+}
+
 #sidebar {
-  position:absolute; left:0; top:0; bottom:0; width:280px;
-  background:#fff; border-right:1px solid #ddd; overflow-y:auto; z-index:2;
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 280px;
+  background: #fff;
+  border-right: 1px solid #ddd;
+  overflow-y: auto;
+  z-index: 2;
 }
-#header { padding:16px; border-bottom:1px solid #eee; }
-#header h2 { margin:0; font-size:18px; }
-#layer-list { padding:12px; }
+
+#header {
+  padding: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+#header h2 {
+  margin: 0;
+  font-size: 18px;
+}
+
+.group-title {
+  padding: 10px 12px;
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #666;
+  border-top: 1px solid #f0f0f0;
+  margin-top: 10px;
+}
+
+.layer-list {
+  padding: 8px 12px;
+}
+
 .layer-row {
-  display:flex; justify-content:space-between; align-items:center;
-  padding:8px 0; border-bottom:1px solid #f2f2f2;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
 }
-.layer-name { flex:1; margin-left:8px; }
+
+.layer-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .zoom-btn {
-  border:1px solid #ccc; background:#fff; cursor:pointer;
-  border-radius:4px; padding:2px 8px;
+  border: 1px solid #ccc;
+  background: #fff;
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
 }
-#map { position:absolute; left:280px; right:0; top:0; bottom:0; }
+
+.zoom-btn:hover {
+  background: #f5f5f5;
+}
+
+#map {
+  position: absolute;
+  left: 280px;
+  right: 0;
+  top: 0;
+  bottom: 0;
+}
 </style>
 </head>
+
 <body>
 
 <div id="sidebar">
-  <div id="header"><h2>Layers</h2></div>
+  <div id="header">
+    <h2>Layers</h2>
+  </div>
   <div id="layer-list"></div>
 </div>
 
 <div id="map"></div>
 
 <script>
+
 const map = new maplibregl.Map({
   container: "map",
   style: "https://tiles.openfreemap.org/styles/positron",
@@ -50,170 +112,291 @@ const map = new maplibregl.Map({
 
 map.addControl(new maplibregl.NavigationControl(), "top-right");
 
+/* =========================
+   STATE
+========================= */
+
+let loadedCount = 0;
+let extentLayers = [];
+
+/* =========================
+   INIT
+========================= */
+
 map.on("load", () => {
-  buildLayerUI();
+  buildSidebar();
   (window.LAYERS || []).forEach(loadLayer);
 });
 
-function loadLayer(layer){
-  if(layer.type === "geojson") loadGeoJSON(layer);
-  if(layer.type === "rest") loadREST(layer);
-  if(layer.type === "sheet") loadSheet(layer);
+/* =========================
+   LOADERS
+========================= */
+
+function loadLayer(layer) {
+  if (layer.type === "geojson") loadGeoJSON(layer);
+  if (layer.type === "rest") loadREST(layer);
+  if (layer.type === "sheet") loadSheet(layer);
 }
 
-function loadGeoJSON(layer){
+function loadGeoJSON(layer) {
   fetch(layer.url)
     .then(r => r.json())
-    .then(data => addGeoJSONLayer(layer, data))
-    .catch(err => console.error("Failed loading", layer.name, err));
+    .then(data => addLayer(layer, data))
+    .catch(err => console.error("Failed:", layer.name, err));
 }
 
-function loadREST(layer){
+function loadREST(layer) {
   fetch(layer.url)
     .then(r => r.json())
-    .then(data => addGeoJSONLayer(layer, data))
-    .catch(err => console.error("Failed loading", layer.name, err));
+    .then(data => addLayer(layer, data))
+    .catch(err => console.error("Failed:", layer.name, err));
 }
 
-function loadSheet(layer){
+function loadSheet(layer) {
   Papa.parse(layer.url, {
-    download:true,
-    header:true,
-    complete: function(results){
+    download: true,
+    header: true,
+
+    complete: function(results) {
+
       const geojson = {
-        type:"FeatureCollection",
+        type: "FeatureCollection",
         features: results.data
           .filter(r => r[layer.latField] && r[layer.lngField])
           .map(r => ({
-            type:"Feature",
-            geometry:{
-              type:"Point",
-              coordinates:[
+            type: "Feature",
+            geometry: {
+              type: "Point",
+              coordinates: [
                 parseFloat(r[layer.lngField]),
                 parseFloat(r[layer.latField])
               ]
             },
-            properties:r
+            properties: r
           }))
       };
-      addGeoJSONLayer(layer, geojson);
+
+      addLayer(layer, geojson);
     },
-    error: err => console.error("Failed loading", layer.name, err)
+
+    error: err => console.error("Failed:", layer.name, err)
   });
 }
 
-function detectGeometry(data){
-  const feature = data.features?.find(f => f.geometry);
-  if(!feature) return "point";
-  const t = feature.geometry.type;
-  if(["Point","MultiPoint"].includes(t)) return "point";
-  if(["LineString","MultiLineString"].includes(t)) return "line";
+/* =========================
+   ADD LAYER
+========================= */
+
+function addLayer(layer, data) {
+
+  map.addSource(layer.id, {
+    type: "geojson",
+    data: data
+  });
+
+  const geomType = detectGeometry(data);
+
+  if (geomType === "point") {
+    map.addLayer({
+      id: layer.id,
+      type: "circle",
+      source: layer.id,
+      paint: {
+        "circle-radius": 6,
+        "circle-color": "#2563eb",
+        "circle-stroke-width": 1,
+        "circle-stroke-color": "#fff"
+      }
+    });
+  }
+
+  if (geomType === "line") {
+    map.addLayer({
+      id: layer.id,
+      type: "line",
+      source: layer.id,
+      paint: {
+        "line-color": "#2563eb",
+        "line-width": 2
+      }
+    });
+  }
+
+  if (geomType === "polygon") {
+    map.addLayer({
+      id: layer.id,
+      type: "fill",
+      source: layer.id,
+      paint: {
+        "fill-color": "#f59e0b",
+        "fill-opacity": 0.25,
+        "fill-outline-color": "#b45309"
+      }
+    });
+  }
+
+  /* =========================
+     EXTENT LOGIC
+  ========================= */
+
+  if (layer.initialExtentLayer) {
+    extentLayers.push(data);
+  }
+
+  loadedCount++;
+  checkAllLoaded();
+}
+
+/* =========================
+   DETECT GEOMETRY
+========================= */
+
+function detectGeometry(data) {
+  const f = data.features?.find(d => d.geometry);
+  if (!f) return "point";
+
+  const t = f.geometry.type;
+
+  if (t.includes("Point")) return "point";
+  if (t.includes("Line")) return "line";
   return "polygon";
 }
 
-function addGeoJSONLayer(layer, data){
-  const geometryType = detectGeometry(data);
+/* =========================
+   AUTO FIT EXTENT
+========================= */
 
-  map.addSource(layer.id, {
-    type:"geojson",
-    data:data
+function checkAllLoaded() {
+
+  if (loadedCount !== (window.LAYERS || []).length) return;
+  if (!extentLayers.length) return;
+
+  const coords = [];
+
+  extentLayers.forEach(fc => {
+    fc.features.forEach(f => {
+      collectCoords(f.geometry, coords);
+    });
   });
 
-  if(geometryType === "point"){
-    map.addLayer({
-      id:layer.id,
-      type:"circle",
-      source:layer.id,
-      paint:{
-        "circle-radius":6,
-        "circle-color":"#2563eb",
-        "circle-stroke-width":1,
-        "circle-stroke-color":"#ffffff"
-      }
-    });
-  }
+  let minX, minY, maxX, maxY;
 
-  if(geometryType === "line"){
-    map.addLayer({
-      id:layer.id,
-      type:"line",
-      source:layer.id,
-      paint:{
-        "line-color":"#2563eb",
-        "line-width":2
-      }
-    });
-  }
+  coords.forEach((c, i) => {
+    if (i === 0) {
+      minX = maxX = c[0];
+      minY = maxY = c[1];
+    } else {
+      minX = Math.min(minX, c[0]);
+      minY = Math.min(minY, c[1]);
+      maxX = Math.max(maxX, c[0]);
+      maxY = Math.max(maxY, c[1]);
+    }
+  });
 
-  if(geometryType === "polygon"){
-    map.addLayer({
-      id:layer.id,
-      type:"fill",
-      source:layer.id,
-      paint:{
-        "fill-color":"#f59e0b",
-        "fill-opacity":0.25,
-        "fill-outline-color":"#b45309"
-      }
-    });
-  }
+  map.fitBounds([[minX, minY], [maxX, maxY]], {
+    padding: 40
+  });
 }
 
-function buildLayerUI(){
+/* =========================
+   COORDS UTILITY
+========================= */
+
+function collectCoords(geom, out) {
+  if (!geom) return;
+
+  if (geom.type === "Point") out.push(geom.coordinates);
+
+  else if (geom.type === "MultiPoint" || geom.type === "LineString")
+    geom.coordinates.forEach(c => out.push(c));
+
+  else if (geom.type === "MultiLineString" || geom.type === "Polygon")
+    geom.coordinates.flat().forEach(c => out.push(c));
+
+  else if (geom.type === "MultiPolygon")
+    geom.coordinates.flat(2).forEach(c => out.push(c));
+}
+
+/* =========================
+   SIDEBAR
+========================= */
+
+function buildSidebar() {
   const container = document.getElementById("layer-list");
 
+  const groups = {};
+
   (window.LAYERS || []).forEach(layer => {
-    const row = document.createElement("div");
-    row.className = "layer-row";
+    const g = layer.group || "Layers";
+    if (!groups[g]) groups[g] = [];
+    groups[g].push(layer);
+  });
 
-    row.innerHTML = `
-      <div>
-        <input type="checkbox" checked id="toggle-${layer.id}">
-        <span class="layer-name">${layer.name}</span>
-      </div>
-      <button class="zoom-btn" id="zoom-${layer.id}">⤢</button>
-    `;
+  Object.keys(groups).forEach(group => {
 
-    container.appendChild(row);
+    const title = document.createElement("div");
+    title.className = "group-title";
+    title.innerText = group;
+    container.appendChild(title);
 
-    row.querySelector(`#toggle-${layer.id}`).addEventListener("change", e => {
-      if(!map.getLayer(layer.id)) return;
-      map.setLayoutProperty(
-        layer.id,
-        "visibility",
-        e.target.checked ? "visible" : "none"
-      );
-    });
+    groups[group].forEach(layer => {
 
-    row.querySelector(`#zoom-${layer.id}`).addEventListener("click", () => {
-      const source = map.getSource(layer.id);
-      if(!source || !source._data || !source._data.features?.length) return;
+      const row = document.createElement("div");
+      row.className = "layer-row";
 
-      const coords = [];
-      source._data.features.forEach(f => collectCoords(f.geometry, coords));
+      row.innerHTML = `
+        <div class="layer-left">
+          <input type="checkbox" checked id="toggle-${layer.id}">
+          <span>${layer.name}</span>
+        </div>
+        <button class="zoom-btn" id="zoom-${layer.id}">⤢</button>
+      `;
 
-      if(!coords.length) return;
+      container.appendChild(row);
 
-      let minX=coords[0][0], minY=coords[0][1], maxX=coords[0][0], maxY=coords[0][1];
-      coords.forEach(c => {
-        minX=Math.min(minX,c[0]);
-        minY=Math.min(minY,c[1]);
-        maxX=Math.max(maxX,c[0]);
-        maxY=Math.max(maxY,c[1]);
-      });
+      /* toggle */
+      row.querySelector(`#toggle-${layer.id}`)
+        .addEventListener("change", e => {
+          if (!map.getLayer(layer.id)) return;
+          map.setLayoutProperty(
+            layer.id,
+            "visibility",
+            e.target.checked ? "visible" : "none"
+          );
+        });
 
-      map.fitBounds([[minX,minY],[maxX,maxY]], {padding:40});
+      /* zoom */
+      row.querySelector(`#zoom-${layer.id}`)
+        .addEventListener("click", () => {
+          const src = map.getSource(layer.id);
+          if (!src?._data?.features) return;
+
+          const coords = [];
+          src._data.features.forEach(f => {
+            collectCoords(f.geometry, coords);
+          });
+
+          if (!coords.length) return;
+
+          let minX = coords[0][0], minY = coords[0][1];
+          let maxX = coords[0][0], maxY = coords[0][1];
+
+          coords.forEach(c => {
+            minX = Math.min(minX, c[0]);
+            minY = Math.min(minY, c[1]);
+            maxX = Math.max(maxX, c[0]);
+            maxY = Math.max(maxY, c[1]);
+          });
+
+          map.fitBounds([[minX, minY], [maxX, maxY]], {
+            padding: 40
+          });
+        });
+
     });
   });
 }
 
-function collectCoords(geom, out){
-  if(!geom) return;
-  if(geom.type === "Point") out.push(geom.coordinates);
-  else if(geom.type === "MultiPoint" || geom.type === "LineString") out.push(...geom.coordinates);
-  else if(geom.type === "MultiLineString" || geom.type === "Polygon") geom.coordinates.flat().forEach(c => out.push(c));
-  else if(geom.type === "MultiPolygon") geom.coordinates.flat(2).forEach(c => out.push(c));
-}
 </script>
 
 </body>
