@@ -1,29 +1,4 @@
 window.LAYERS = [
-
-  /* =====================================
-     GEOGRAPHY
-  ===================================== */
-
-  {
-    id: "counties",
-    name: "Counties",
-    group: "Geography",
-    type: "rest",
-
-    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/2/query?where=NAME='Westchester'%20OR%20NAME='Rockland'%20OR%20NAME='Sullivan'%20OR%20NAME='Putnam'%20OR%20NAME='Ulster'%20OR%20NAME='Orange'%20OR%20NAME='Dutchess'&outFields=*&f=geojson",
-
-    initialExtentLayer: true
-  },
-
-  {
-    id: "towns",
-    name: "Towns",
-    group: "Geography",
-    type: "rest",
-
-    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/6/query?where=COUNTY='Westchester'%20OR%20COUNTY='Rockland'%20OR%20COUNTY='Sullivan'%20OR%20COUNTY='Putnam'%20OR%20COUNTY='Ulster'%20OR%20COUNTY='Orange'%20OR%20COUNTY='Dutchess'&outFields=*&f=geojson"
-  },
-
   /* =====================================
      ECONOMIC DEVELOPMENT
   ===================================== */
@@ -50,6 +25,30 @@ window.LAYERS = [
 
     latField: "Latitude",
     lngField: "Longitude"
+  },
+
+  /* =====================================
+     GEOGRAPHY
+  ===================================== */
+
+  {
+    id: "counties",
+    name: "Counties",
+    group: "Geography",
+    type: "rest",
+
+    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/2/query?where=NAME='Westchester'%20OR%20NAME='Rockland'%20OR%20NAME='Sullivan'%20OR%20NAME='Putnam'%20OR%20NAME='Ulster'%20OR%20NAME='Orange'%20OR%20NAME='Dutchess'&outFields=*&f=geojson",
+
+    initialExtentLayer: true
+  },
+
+  {
+    id: "towns",
+    name: "Towns",
+    group: "Geography",
+    type: "rest",
+
+    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/6/query?where=COUNTY='Westchester'%20OR%20COUNTY='Rockland'%20OR%20COUNTY='Sullivan'%20OR%20COUNTY='Putnam'%20OR%20COUNTY='Ulster'%20OR%20COUNTY='Orange'%20OR%20COUNTY='Dutchess'&outFields=*&f=geojson"
   }
 
 ];
