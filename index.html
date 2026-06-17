@@ -25,10 +25,7 @@ html, body {
 /* MAP */
 #map {
   position: absolute;
-  left: 0;
-  right: 0;
-  top: 0;
-  bottom: 0;
+  inset: 0;
 }
 
 /* SIDEBAR */
@@ -40,7 +37,7 @@ html, body {
 
   width: 300px;
 
-  background: #ffffff;
+  background: #fff;
   border-radius: 14px;
   box-shadow: 0 10px 30px rgba(0,0,0,0.12);
 
@@ -58,7 +55,7 @@ html, body {
 }
 
 #project-title {
-  font-size: 16px;
+  font-size: 13px;
   font-weight: 600;
   margin-bottom: 6px;
   color: #111827;
@@ -66,22 +63,22 @@ html, body {
 
 #header h2 {
   margin: 0;
-  font-size: 14px;
+  font-size: 16px;
   color: #374151;
 }
 
 /* LIST */
 #layer-list {
-  padding: 12px;
+  padding: 10px;
   overflow-y: auto;
   flex: 1;
 }
 
-/* GROUP */
+/* GROUPS */
 .group-title {
   margin-top: 14px;
   margin-bottom: 6px;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   color: #6b7280;
 }
@@ -106,11 +103,19 @@ html, body {
   font-size: 13px;
 }
 
+/* LEGEND SYMBOL */
+.legend-symbol {
+  display: inline-flex;
+  align-items: center;
+  margin-right: 6px;
+}
+
+/* ZOOM BUTTON */
 .zoom-btn {
   border: 1px solid #e5e7eb;
   border-radius: 8px;
   padding: 4px 10px;
-  background: white;
+  background: #fff;
   cursor: pointer;
 }
 
@@ -137,17 +142,22 @@ html, body {
 <script>
 
 /* =========================
-   MAP
+   MAP (NO ROTATION)
 ========================= */
 
 const map = new maplibregl.Map({
   container: "map",
   style: "https://tiles.openfreemap.org/styles/positron",
   center: [-73.9209, 41.2901],
-  zoom: 8
+  zoom: 8,
+  dragRotate: false,
+  pitchWithRotate: false,
+  touchPitch: false
 });
 
-map.addControl(new maplibregl.NavigationControl(), "top-right");
+map.addControl(new maplibregl.NavigationControl({
+  showCompass: false
+}), "top-right");
 
 /* =========================
    STATE
@@ -156,7 +166,7 @@ map.addControl(new maplibregl.NavigationControl(), "top-right");
 const STATE = {
   featuresByLayer: {},
   layerDefs: {},
-  loadedPromises: []
+  loaded: []
 };
 
 /* =========================
@@ -171,9 +181,9 @@ map.on("load", async () => {
 
   layers.forEach(l => STATE.layerDefs[l.id] = l);
 
-  STATE.loadedPromises = layers.map(loadLayer);
+  STATE.loaded = layers.map(loadLayer);
 
-  await Promise.all(STATE.loadedPromises);
+  await Promise.all(STATE.loaded);
 
   runInitialView(layers);
 
@@ -209,6 +219,7 @@ function loadSheet(layer) {
       header: true,
 
       complete: res => {
+
         const geojson = {
           type: "FeatureCollection",
           features: res.data
@@ -237,31 +248,24 @@ function loadSheet(layer) {
 }
 
 /* =========================
-   REGISTER
+   REGISTER + RENDER
 ========================= */
 
 function register(layerId, geojson) {
 
-  const features = geojson?.features || [];
-  STATE.featuresByLayer[layerId] = features;
-
-  addLayer(layerId, geojson);
-}
-
-/* =========================
-   RENDER (STYLE SYSTEM)
-========================= */
-
-function addLayer(layerId, data) {
+  STATE.featuresByLayer[layerId] = geojson.features || [];
 
   const layerDef = STATE.layerDefs[layerId];
   const style = window.STYLES?.[layerDef?.style];
 
-  if (!map.getSource(layerId)) {
-    map.addSource(layerId, { type: "geojson", data });
-  }
-
   if (!style) return;
+
+  if (!map.getSource(layerId)) {
+    map.addSource(layerId, {
+      type: "geojson",
+      data: geojson
+    });
+  }
 
   map.addLayer({
     id: layerId,
@@ -295,16 +299,26 @@ function fitExtent(layerIds) {
     maxY = Math.max(maxY, c[1]);
   });
 
-  map.fitBounds([[minX, minY], [maxX, maxY]], { padding: 50 });
+  map.fitBounds([[minX, minY], [maxX, maxY]], {
+    padding: 50
+  });
 }
 
 /* =========================
-   INITIAL VIEW
+   INITIAL VIEW (FIXED)
 ========================= */
 
 function runInitialView(layers) {
-  const targets = layers.filter(l => l.initialView).map(l => l.id);
-  if (targets.length) fitExtent(targets);
+
+  requestAnimationFrame(() => {
+
+    const targets = layers.filter(l => l.initialView).map(l => l.id);
+    if (!targets.length) return;
+
+    setTimeout(() => fitExtent(targets), 150);
+
+  });
+
 }
 
 /* =========================
@@ -341,11 +355,14 @@ function buildSidebar() {
 
     layers.forEach(layer => {
 
+      const style = window.STYLES?.[layer.style];
+
       const row = document.createElement("div");
       row.className = "layer-row";
 
       row.innerHTML = `
         <div class="layer-left">
+          ${style?.legend ? renderLegend(style.legend) : ""}
           <input type="checkbox" checked id="t-${layer.id}">
           <span>${layer.name}</span>
         </div>
@@ -363,6 +380,7 @@ function buildSidebar() {
 
       row.querySelector(`#z-${layer.id}`)
         .addEventListener("click", () => {
+
           const f = STATE.featuresByLayer[layer.id];
           if (!f?.length) return;
 
@@ -384,6 +402,37 @@ function buildSidebar() {
 
     });
   });
+}
+
+/* =========================
+   LEGEND RENDER
+========================= */
+
+function renderLegend(l) {
+
+  if (l.type === "circle") {
+    return `<span class="legend-symbol" style="
+      width:10px;height:10px;border-radius:50%;
+      background:${l.color};
+    "></span>`;
+  }
+
+  if (l.type === "line") {
+    return `<span class="legend-symbol" style="
+      width:14px;height:2px;
+      background:${l.color};
+    "></span>`;
+  }
+
+  if (l.type === "fill") {
+    return `<span class="legend-symbol" style="
+      width:10px;height:10px;
+      background:${l.color};
+      border:1px solid #ccc;
+    "></span>`;
+  }
+
+  return "";
 }
 
 </script>
