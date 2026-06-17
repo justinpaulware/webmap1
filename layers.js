@@ -10,7 +10,9 @@ window.LAYERS = [
     group: "Geography",
     type: "rest",
 
-    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/2/query?where=NAME='Westchester'%20OR%20NAME='Rockland'%20OR%20NAME='Sullivan'%20OR%20NAME='Putnam'%20OR%20NAME='Ulster'%20OR%20NAME='Orange'%20OR%20NAME='Dutchess'&outFields=*&f=geojson"
+    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/2/query?where=NAME='Westchester'%20OR%20NAME='Rockland'%20OR%20NAME='Sullivan'%20OR%20NAME='Putnam'%20OR%20NAME='Ulster'%20OR%20NAME='Orange'%20OR%20NAME='Dutchess'&outFields=*&f=geojson",
+
+    initialExtentLayer: true
   },
 
   {
