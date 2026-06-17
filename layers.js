@@ -21,7 +21,7 @@ window.LAYERS = [
     group: "Geography",
     type: "rest",
 
-    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/5/query?where=COUNTY='Westchester'%20OR%20COUNTY='Rockland'%20OR%20COUNTY='Sullivan'%20OR%20COUNTY='Putnam'%20OR%20COUNTY='Ulster'%20OR%20COUNTY='Orange'%20OR%20COUNTY='Dutchess'&outFields=*&f=geojson"
+    url: "https://services6.arcgis.com/EbVsqZ18sv1kVJ3k/arcgis/rest/services/NYS_Civil_Boundaries/FeatureServer/6/query?where=COUNTY='Westchester'%20OR%20COUNTY='Rockland'%20OR%20COUNTY='Sullivan'%20OR%20COUNTY='Putnam'%20OR%20COUNTY='Ulster'%20OR%20COUNTY='Orange'%20OR%20COUNTY='Dutchess'&outFields=*&f=geojson"
   },
 
   /* =====================================
